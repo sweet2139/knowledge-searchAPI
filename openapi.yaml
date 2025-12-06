@@ -1,0 +1,1603 @@
+openapi: 3.1.0
+
+info:
+  title: Meego Media & Collaboration Platform API
+  description: |
+    # 🛠 Meego 协同平台开放 API (v1.6.0)
+    
+    提供完整的媒体资源管理与协作功能，支持上传、预览、旋转、审计追踪等核心能力。
+    
+    ## 🎯 核心功能
+    - 图片上传实时回显与预览
+    - 多图管理（删除、替换、旋转）
+    - 大图查看器支持缩放、平移、下载
+    - 完整的审计日志记录
+    - 跨端兼容性（Web、移动端、飞书集成）
+    
+    ## 📊 性能目标
+    - 图片上传咨询量 ↓30%
+    - 用户满意度评分 ≥4.2/5.0
+    - 操作追溯完整性 100%
+    - 跨浏览器/设备兼容性 100%
+  version: "1.6.0"
+  contact:
+    name: Meego平台研发部
+    email: api-support@meego.com
+    url: https://developer.meego.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  termsOfService: https://meego.com/terms-of-service
+
+externalDocs:
+  description: Meego开发者中心
+  url: https://developer.meego.com
+
+servers:
+  - url: https://api.meego.com/v1
+    description: 生产环境 - 全球负载均衡
+    variables:
+      region:
+        default: cn-east-1
+        enum:
+          - cn-east-1
+          - cn-north-1
+          - us-west-1
+          - eu-central-1
+        description: 数据中心区域
+  - url: https://staging-api.meego.com/v1
+    description: 预发环境 - 用于测试和验收
+  - url: https://api-sandbox.meego.com/v1
+    description: 沙箱环境 - 开发测试使用，数据隔离
+  - url: https://localhost:8080/v1
+    description: 本地开发环境
+
+tags:
+  - name: Media
+    description: 图片资源管理：上传、查看、编辑、删除
+  - name: AuditLog
+    description: 操作记录与审计追踪
+  - name: Onboarding
+    description: 新功能引导与用户提示
+  - name: Environment
+    description: 运行环境检测与能力查询
+  - name: Knowledge
+    description: 代码知识抽取与语义检索
+  - name: Permission
+    description: 权限控制与配额管理
+  - name: Quota
+    description: 容量配额校验与管理
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 使用 Bearer Token 认证，格式为 JWT。
+
+  schemas:
+    # ==================== 基础数据结构 ====================
+    ImageMetadata:
+      type: object
+      description: 图片元数据扩展字段
+      properties:
+        scene:
+          type: string
+          enum: [form, comment, detail, space_config]
+          description: 上传场景类型，决定缩略图尺寸策略
+          examples:
+            - value: form
+              summary: 表单附件上传
+            - value: comment
+              summary: 评论区图片上传
+        recommendedThumbnailSize:
+          type: object
+          description: 推荐的缩略图尺寸（px），适配不同设备
+          properties:
+            desktop:
+              type: integer
+              description: PC端推荐尺寸
+              examples:
+                - value: 200
+                  summary: 桌面端 200px
+            tablet:
+              type: integer
+              description: 平板端推荐尺寸
+              examples:
+                - value: 150
+                  summary: 平板端 150px
+            mobile:
+              type: integer
+              description: 手机端推荐尺寸
+              examples:
+                - value: 120
+                  summary: 手机端 120px
+        compressible:
+          type: boolean
+          description: 是否适合压缩
+          examples:
+            - value: true
+              summary: 可压缩
+        formatSupport:
+          type: object
+          description: 格式转换支持情况
+          properties:
+            webp:
+              type: boolean
+              description: 是否支持 WebP 转换
+              examples:
+                - value: true
+                  summary: 支持 WebP
+            avif:
+              type: boolean
+              description: 是否支持 AVIF 转换
+              examples:
+                - value: false
+                  summary: 不支持 AVIF
+        auditStatus:
+          type: string
+          enum: [pending, approved, rejected]
+          description: 审核状态
+          examples:
+            - value: approved
+              summary: 已审核
+        isAnimated:
+          type: boolean
+          description: 是否为动图（GIF）
+          examples:
+            - value: true
+              summary: GIF动图
+
+    # ==================== 错误响应详情 ====================
+    ErrorDetails:
+      type: object
+      description: 错误详情
+      properties:
+        field:
+          type: string
+          description: 出错字段名
+          examples:
+            - value: angle
+              summary: 角度字段
+        reason:
+          type: string
+          description: 错误原因
+          examples:
+            - value: Must be one of 90, 180, or 270
+              summary: 必须为90的倍数
+        maxSizeMB:
+          type: integer
+          description: 最大允许文件大小（MB）
+          examples:
+            - value: 10
+              summary: 最大10MB
+        maxCount:
+          type: integer
+          description: 最大允许上传数量
+          examples:
+            - value: 3
+              summary: 最多3张
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      description: 统一错误响应结构
+      properties:
+        code:
+          type: string
+          description: 错误代码（机器可读）
+          examples:
+            - value: IMG_ROTATE_INVALID_ANGLE
+              summary: 无效旋转角度
+            - value: FILE_SIZE_EXCEEDED
+              summary: 文件过大
+            - value: UNSUPPORTED_MEDIA_TYPE
+              summary: 不支持的媒体类型
+            - value: UPLOAD_LIMIT_EXCEEDED
+              summary: 上传数量超限
+            - value: TENANT_QUOTA_EXCEEDED
+              summary: 租户配额不足
+        message:
+          type: string
+          description: 可读错误描述（支持国际化）
+          examples:
+            - value: The rotation angle must be a multiple of 90 degrees.
+              summary: 角度必须是90的倍数
+            - value: File size exceeds the limit for your current plan.
+              summary: 文件超出当前计划限制
+            - value: Current version supports a maximum of 3 images per upload.
+              summary: 当前版本单次最多上传3张图片
+        details:
+          $ref: '#/components/schemas/ErrorDetails'
+        requestId:
+          type: string
+          format: uuid
+          description: 请求追踪ID
+          examples:
+            - value: req_20251110_abc123
+              summary: 请求ID
+        supportUrl:
+          type: string
+          format: uri
+          description: 支持链接
+          examples:
+            - value: https://support.meego.com/ticket/create
+              summary: 创建工单链接
+
+    ImageResponse:
+      type: object
+      description: 图片资源详细信息
+      properties:
+        id:
+          type: string
+          pattern: '^img_[a-zA-Z0-9_]+$'
+          description: 图片唯一标识符
+          examples:
+            - value: img_abc123def456
+              summary: 示例图片ID
+        name:
+          type: string
+          description: 文件名
+          maxLength: 255
+          examples:
+            - value: 产品设计稿_v2.png
+              summary: 中文文件名示例
+        size:
+          type: integer
+          minimum: 1
+          description: 文件大小（字节）
+          examples:
+            - value: 1048576
+              summary: 1MB
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/gif, image/webp]
+          description: MIME 类型
+          examples:
+            - value: image/png
+              summary: PNG格式
+        width:
+          type: integer
+          minimum: 1
+          description: 原始宽度（像素）
+          examples:
+            - value: 1920
+              summary: 宽度1920px
+        height:
+          type: integer
+          minimum: 1
+          description: 原始高度（像素）
+          examples:
+            - value: 1080
+              summary: 高度1080px
+        isPortrait:
+          type: boolean
+          description: 是否为竖屏图片（height > width）
+          examples:
+            - value: false
+              summary: 横屏图片
+        aspectRatio:
+          type: number
+          format: float
+          description: 宽高比（width / height），用于前端计算
+          examples:
+            - value: 1.7778
+              summary: 16:9比例
+        thumbnailUrl:
+          type: string
+          format: uri
+          description: 默认缩略图URL
+          examples:
+            - value: https://cdn.meego.com/thumbs/img_abc123def456_200x200.webp
+              summary: 缩略图地址
+        originalUrl:
+          type: string
+          format: uri
+          description: 原始图片URL（未经压缩）
+          examples:
+            - value: https://cdn.meego.com/originals/img_abc123def456.png
+              summary: 原图地址
+        uploadedAt:
+          type: string
+          format: date-time
+          description: 上传完成时间（UTC）
+          examples:
+            - value: "2025-11-08T10:30:00Z"
+              summary: ISO8601时间格式
+        createdBy:
+          type: string
+          description: 上传者ID
+          examples:
+            - value: usr_zhangsan_001
+              summary: 用户ID
+        metadata:
+          $ref: '#/components/schemas/ImageMetadata'
+        uploadProgressChannel:
+          type: string
+          description: WebSocket进度频道地址
+          examples:
+            - value: wss://ws.meego.com/v1/upload/progress/img_abc123def456
+              summary: 实时进度通道
+        permissions:
+          type: object
+          description: 当前用户的操作权限
+          properties:
+            canView:
+              type: boolean
+              description: 是否有查看权限
+              examples:
+                - value: true
+            canDownload:
+              type: boolean
+              description: 是否有下载权限
+              examples:
+                - value: true
+            canDelete:
+              type: boolean
+              description: 是否有删除权限
+              examples:
+                - value: true
+            canReplace:
+              type: boolean
+              description: 是否有替换权限
+              examples:
+                - value: true
+            canRotate:
+              type: boolean
+              description: 是否有旋转权限
+              examples:
+                - value: true
+        rotation:
+          type: integer
+          description: 当前旋转角度（0, 90, 180, 270）
+          default: 0
+          examples:
+            - value: 90
+              summary: 已旋转90度
+
+    # ==================== 配额与容量管理 ====================
+    QuotaInfo:
+      type: object
+      description: 租户配额信息
+      properties:
+        tenantId:
+          type: string
+          description: 租户ID
+          examples:
+            - value: tenant_12345
+        plan:
+          type: string
+          enum: [free, standard, premium, enterprise]
+          description: 当前套餐
+          examples:
+            - value: premium
+        maxFileSizeMB:
+          type: integer
+          description: 单文件最大大小（MB）
+          examples:
+            - value: 20
+        maxUploadCount:
+          type: integer
+          description: 单次最多上传数量（Free版限制）
+          examples:
+            - value: 3
+        remainingStorageMB:
+          type: integer
+          description: 剩余存储空间（MB）
+          examples:
+            - value: 1024
+        currentUsageMB:
+          type: integer
+          description: 当前已使用空间（MB）
+          examples:
+            - value: 256
+
+    QuotaValidationRequest:
+      type: object
+      description: 配额验证请求
+      required: [fileSize]
+      properties:
+        fileSize:
+          type: integer
+          description: 文件大小（字节）
+          minimum: 1
+          examples:
+            - value: 10485760
+              summary: 10MB
+        fileCount:
+          type: integer
+          description: 文件数量（用于多图上传验证）
+          minimum: 1
+          default: 1
+          examples:
+            - value: 4
+
+    QuotaValidationResponse:
+      type: object
+      description: 配额验证结果
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+          description: 是否通过验证
+          examples:
+            - value: false
+        reason:
+          type: string
+          description: 验证失败原因
+          examples:
+            - value: FILE_SIZE_EXCEEDED
+        details:
+          $ref: '#/components/schemas/ErrorDetails'
+        suggestedAction:
+          type: string
+          description: 建议操作
+          examples:
+            - value: Please compress the image or upgrade your plan.
+
+    # ==================== 操作记录 ====================
+    OperationLog:
+      type: object
+      description: 操作记录
+      properties:
+        id:
+          type: string
+          description: 日志ID
+          examples:
+            - value: log_20251108_001
+              summary: 日志ID
+        timestamp:
+          type: string
+          format: date-time
+          description: 操作时间
+          examples:
+            - value: "2025-11-08T10:30:00Z"
+              summary: ISO8601时间格式
+        userId:
+          type: string
+          description: 操作用户ID
+          examples:
+            - value: usr_zhangsan_001
+              summary: 用户ID
+        userName:
+          type: string
+          description: 操作用户名
+          examples:
+            - value: 张三
+              summary: 用户姓名
+        operationType:
+          type: string
+          enum: [upload, delete, replace, rotate]
+          description: 操作类型
+          examples:
+            - value: rotate
+              summary: 旋转操作
+        objectType:
+          type: string
+          description: 操作对象类型
+          examples:
+            - value: image
+              summary: 图片类型
+        objectId:
+          type: string
+          description: 操作对象ID
+          examples:
+            - value: img_abc123def456
+              summary: 图片ID
+        objectName:
+          type: string
+          description: 操作对象名称
+          examples:
+            - value: 产品设计稿_v2.png
+              summary: 图片名称
+        details:
+          type: object
+          description: 操作详情
+          properties:
+            angle:
+              type: integer
+              description: 旋转角度
+              examples:
+                - value: 90
+                  summary: 旋转90度
+            oldFileName:
+              type: string
+              description: 替换前文件名
+              examples:
+                - value: 旧图片.png
+            newFileName:
+              type: string
+              description: 替换后文件名
+              examples:
+                - value: 新图片.png
+        ipAddress:
+          type: string
+          description: 操作IP地址
+          examples:
+            - value: 192.168.1.100
+        userAgent:
+          type: string
+          description: 用户代理
+          examples:
+            - value: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # ==================== 知识检索 ====================
+    KnowledgeSearchRequest:
+      type: object
+      description: 知识检索请求
+      properties:
+        query:
+          type: string
+          description: 搜索查询语句
+          examples:
+            - value: 图片旋转没记录
+              summary: 自然语言查询
+        filters:
+          type: object
+          description: 筛选条件
+          properties:
+            type:
+              type: array
+              items:
+                type: string
+                enum: [bug, requirement, api, code, test_case, feedback]
+              description: 知识类型
+            status:
+              type: string
+              enum: [active, archived]
+              description: 文档状态
+            createdAfter:
+              type: string
+              format: date-time
+              description: 创建时间筛选
+        limit:
+          type: integer
+          description: 返回结果数量
+          default: 10
+          minimum: 1
+          maximum: 100
+        includeArchived:
+          type: boolean
+          description: 是否包含已归档文档
+          default: false
+
+    KnowledgeItem:
+      type: object
+      description: 知识条目
+      properties:
+        id:
+          type: string
+          description: 知识ID
+        type:
+          type: string
+          enum: [bug, requirement, api, code, test_case, feedback]
+          description: 知识类型
+        title:
+          type: string
+          description: 标题
+        content:
+          type: string
+          description: 内容摘要
+        source:
+          type: string
+          description: 来源
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+        status:
+          type: string
+          enum: [active, archived]
+          description: 状态
+        score:
+          type: number
+          format: float
+          description: 匹配分数
+          minimum: 0
+          maximum: 1
+        tags:
+          type: array
+          items:
+            type: string
+          description: 标签
+
+    # ==================== 引导与提示 ====================
+    OnboardingTip:
+      type: object
+      description: 新功能引导提示
+      properties:
+        id:
+          type: string
+          description: 提示ID
+        type:
+          type: string
+          enum: [bubble, modal, tooltip, announcement]
+          description: 提示类型
+        title:
+          type: string
+          description: 标题
+        content:
+          type: string
+          description: 内容
+        targetElement:
+          type: string
+          description: 目标元素选择器
+        position:
+          type: string
+          enum: [top, bottom, left, right]
+          description: 显示位置
+        priority:
+          type: integer
+          description: 优先级
+          minimum: 1
+          maximum: 10
+        showOnce:
+          type: boolean
+          description: 是否只显示一次
+        dismissed:
+          type: boolean
+          description: 用户是否已关闭
+
+  # ==================== 响应定义 ====================
+  responses:
+    BadRequest:
+      description: 请求参数错误（400）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: 未授权访问（401）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: 权限不足（403）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在（404）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FileTooLarge:
+      description: 文件大小超过限制（413）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: 不支持的媒体类型（415）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: 请求频率过高（429）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: 服务器内部错误（500）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  # ========================
+  # 【Media】上传单张图片
+  # ========================
+  /workspaces/{workspaceId}/media/images:
+    post:
+      tags: [Media]
+      summary: 上传单张图片
+      description: |
+        用户上传单张图片文件，系统立即生成缩略图并实时回显到界面。
+        支持拖拽和选择两种方式。
+        
+        ## 版本限制
+        - Free版：单张≤5MB，单次最多3张
+        - Standard版：单张≤10MB
+        - Premium版：单张≤20MB
+        - Enterprise版：单张≤50MB
+        
+        ## 支持的格式
+        - image/jpeg, image/png, image/gif, image/webp
+        
+        ## 场景适配
+        - form: 表单附件上传（缩略图200px）
+        - comment: 评论区上传（缩略图120px）
+        - detail: 详情页编辑（缩略图200px）
+        - space_config: 空间配置（缩略图200px）
+      operationId: uploadImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+            minLength: 5
+            maxLength: 64
+          description: 工作区唯一标识符
+          example:
+            - value: ws_project_alpha_001
+              summary: 示例工作区ID
+        - name: X-Client-Environment
+          in: header
+          schema:
+            type: string
+            enum: [web, feishu_webview, dingtalk_webview, ios_app, android_app]
+            default: web
+          description: 客户端环境标识，用于兼容性适配
+          example:
+            - value: web
+              summary: Web浏览器环境
+            - value: feishu_webview
+              summary: 飞书内嵌页面
+        - name: X-Request-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: 请求追踪ID，用于排查问题
+          example:
+            - value: 123e4567-e89b-12d3-a456-426614174000
+              summary: UUID格式请求ID
+
+      requestBody:
+        required: true
+        description: 图片上传请求体
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 图片文件二进制数据
+                filename:
+                  type: string
+                  maxLength: 255
+                  description: 建议的文件名（可选）
+                  examples:
+                    - value: 产品设计稿_v2.png
+                      summary: 自定义文件名
+                scene:
+                  type: string
+                  enum: [form, comment, detail, space_config]
+                  default: form
+                  description: 上传场景类型
+                  examples:
+                    - value: form
+                      summary: 表单上传场景
+                metadata:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: 自定义元数据（可选）
+                  examples:
+                    - value:
+                        category: design
+                        project_id: PRJ-001
+                      summary: 自定义扩展信息
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, image/gif, image/webp
+
+      responses:
+        '201':
+          description: 上传成功，资源已创建
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+              description: 新建资源URL
+              example:
+                - value: https://api.meego.com/v1/workspaces/ws_project_alpha/media/images/img_abc123
+                  summary: 资源位置
+            X-Audit-Log-Id:
+              schema:
+                type: string
+              description: 审计日志ID
+              example:
+                - value: audit_20241108_001
+                  summary: 日志ID
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: 剩余上传次数
+              example:
+                - value: 95
+                  summary: 剩余调用次数
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageResponse'
+              example:
+                - value:
+                    id: img_abc123def456
+                    name: 产品设计稿_v2.png
+                    size: 1048576
+                    mimeType: image/png
+                    width: 1920
+                    height: 1080
+                    isPortrait: false
+                    aspectRatio: 1.7778
+                    thumbnailUrl: https://cdn.meego.com/thumbs/img_abc123def456_200x200.webp
+                    originalUrl: https://cdn.meego.com/originals/img_abc123def456.png
+                    uploadedAt: "2025-11-08T10:30:00Z"
+                    createdBy: usr_zhangsan_001
+                    metadata:
+                      scene: form
+                      recommendedThumbnailSize:
+                        desktop: 200
+                        tablet: 150
+                        mobile: 120
+                      compressible: true
+                      formatSupport:
+                        webp: true
+                        avif: false
+                      auditStatus: approved
+                      isAnimated: false
+                    uploadProgressChannel: wss://ws.meego.com/v1/upload/progress/img_abc123def456
+                    permissions:
+                      canView: true
+                      canDownload: true
+                      canDelete: true
+                      canReplace: true
+                      canRotate: true
+                    rotation: 0
+                  summary: 成功上传响应示例
+
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/FileTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  # ========================
+  # 【Media】批量上传配额校验
+  # ========================
+  /workspaces/{workspaceId}/media/images/quota/validate:
+    post:
+      tags: [Media, Quota]
+      summary: 批量上传配额预校验
+      description: |
+        在上传前检查当前租户的配额限制，包括：
+        1. 单文件大小限制
+        2. 单次上传数量限制（Free版）
+        3. 剩余存储空间
+        
+        ⚠️ 修复缺陷011：降级租户替换图片时缺少前置容量校验
+      operationId: validateUploadQuota
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+          description: 工作区ID
+          example:
+            - value: ws_project_alpha_001
+
+      requestBody:
+        required: true
+        description: 配额验证请求
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaValidationRequest'
+            example:
+              - value:
+                  fileSize: 12582912
+                  fileCount: 4
+                summary: 验证12MB文件，4张图片
+
+      responses:
+        '200':
+          description: 校验结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaValidationResponse'
+              example:
+                - value:
+                    valid: false
+                    reason: UPLOAD_LIMIT_EXCEEDED
+                    details:
+                      field: fileCount
+                      reason: Exceeds maximum upload count
+                      maxCount: 3
+                    suggestedAction: Current version supports a maximum of 3 images per upload.
+                  summary: Free版超限示例
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  # ========================
+  # 【Media】旋转图片
+  # ========================
+  /workspaces/{workspaceId}/media/images/{imageId}/rotate:
+    post:
+      tags: [Media, AuditLog]
+      summary: 顺时针旋转图片（90°/180°/270°）
+      description: |
+        每次调用将图片顺时针旋转指定角度，并触发审计日志记录。
+        
+        ## 修复内容
+        - 修复缺陷002：旋转操作未生成操作记录
+        - 修复缺陷008：补充错误码定义
+        - 修复缺陷020：添加防抖机制（服务端幂等性保证）
+        
+        ⚠️ 前端应添加防抖（>300ms）避免重复提交。
+      operationId: rotateImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+          description: 工作区ID
+          example:
+            - value: ws_project_alpha_001
+              summary: 工作区标识
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^img_[a-zA-Z0-9_]+$'
+          description: 图片ID
+          example:
+            - value: img_abc123def456
+              summary: 图片标识
+        - name: X-Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: 幂等键，防止重复旋转
+          example:
+            - value: idemp_20251108_001
+
+      requestBody:
+        required: true
+        description: 指定旋转角度
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [angle]
+              properties:
+                angle:
+                  type: integer
+                  description: 旋转角度（仅允许90的倍数）
+                  enum: [90, 180, 270]
+                  examples:
+                    - value: 90
+                      summary: 旋转90度
+                    - value: 180
+                      summary: 旋转180度
+                    - value: 270
+                      summary: 旋转270度
+            example:
+              - value:
+                  angle: 90
+                summary: 旋转90度示例
+
+      responses:
+        '200':
+          description: 旋转成功，状态已更新
+          headers:
+            X-Audit-Log-Id:
+              schema:
+                type: string
+              description: 本次操作的日志ID
+              example:
+                - value: audit_rotate_20241108_001
+                  summary: 审计日志ID
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, rotation, thumbnailUrl, updatedAt]
+                properties:
+                  id:
+                    type: string
+                    pattern: '^img_[a-zA-Z0-9_]+$'
+                    description: 图片ID
+                  rotation:
+                    type: integer
+                    enum: [0, 90, 180, 270]
+                    description: 当前旋转角度
+                  thumbnailUrl:
+                    type: string
+                    format: uri
+                    description: 旋转后的缩略图URL
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: 更新时间
+                  updatedBy:
+                    type: string
+                    description: 操作用户ID
+              example:
+                - value:
+                    id: img_abc123def456
+                    rotation: 90
+                    thumbnailUrl: https://cdn.meego.com/thumbs/img_abc123def456_200x200.webp?rotate=90
+                    updatedAt: "2025-11-08T11:00:00Z"
+                    updatedBy: usr_zhangsan_001
+                  summary: 旋转90度成功
+
+        '400':
+          description: 无效的旋转角度
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                - value:
+                    code: IMG_ROTATE_INVALID_ANGLE
+                    message: Rotation angle must be a multiple of 90 degrees.
+                    details:
+                      field: angle
+                      reason: Must be one of 90, 180, or 270
+                    requestId: req_20251108_001
+                  summary: 角度非法
+        '409':
+          description: 重复操作（幂等冲突）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                - value:
+                    code: OPERATION_CONFLICT
+                    message: A rotate operation is already in progress for this image.
+                    requestId: req_20251108_002
+                  summary: 操作冲突
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
+  # ========================
+  # 【Media】下载原始图片
+  # ========================
+  /workspaces/{workspaceId}/media/images/{imageId}/download:
+    get:
+      tags: [Media]
+      summary: 下载原始图片文件（不带任何渲染参数）
+      description: |
+        强制返回服务器存储的原始分辨率文件，不受缩放、裁剪等影响。
+        
+        ## 修复内容
+        - 修复缺陷013：大图查看器下载的是缩放后的视图，而非原始文件
+      operationId: downloadOriginalImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 工作区ID
+          example:
+            - value: ws_project_alpha_001
+              summary: 工作区ID
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 图片ID
+          example:
+            - value: img_abc123def456
+              summary: 图片ID
+
+      responses:
+        '200':
+          description: 原始图片二进制流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Type:
+              schema:
+                type: string
+              example:
+                - value: image/png
+                  summary: PNG类型
+            Content-Disposition:
+              schema:
+                type: string
+              example:
+                - value: attachment; filename="original_image.png"
+                  summary: 下载头信息
+            X-File-Name:
+              schema:
+                type: string
+              example:
+                - value: original_image.png
+            X-File-Size:
+              schema:
+                type: integer
+              example:
+                - value: 1048576
+        '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ========================
+  # 【Media】替换图片
+  # ========================
+  /workspaces/{workspaceId}/media/images/{imageId}/replace:
+    put:
+      tags: [Media, AuditLog]
+      summary: 替换已上传的图片
+      description: |
+        用新图片替换现有图片，保留原图片ID和关联关系。
+        
+        ## 修复内容
+        - 修复缺陷011：降级租户替换时缺少前置容量校验
+        - 生成操作记录："用户A 将图片 {old} 替换为 {new}"
+      operationId: replaceImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+          description: 工作区ID
+          example:
+            - value: ws_project_alpha_001
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^img_[a-zA-Z0-9_]+$'
+          description: 要替换的图片ID
+          example:
+            - value: img_abc123def456
+
+      requestBody:
+        required: true
+        description: 新图片文件
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 新图片文件
+                filename:
+                  type: string
+                  description: 新文件名（可选）
+
+      responses:
+        '200':
+          description: 替换成功
+          headers:
+            X-Audit-Log-Id:
+              schema:
+                type: string
+              description: 替换操作日志ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageResponse'
+              example:
+                - value:
+                    id: img_abc123def456
+                    name: "新设计稿_v3.png"
+                    size: 2097152
+                    mimeType: image/png
+                    thumbnailUrl: https://cdn.meego.com/thumbs/img_abc123def456_200x200.webp
+                    originalUrl: https://cdn.meego.com/originals/img_abc123def456.png
+                    updatedAt: "2025-11-08T12:00:00Z"
+                  summary: 替换成功响应
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/FileTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ========================
+  # 【Media】删除图片
+  # ========================
+  /workspaces/{workspaceId}/media/images/{imageId}:
+    delete:
+      tags: [Media, AuditLog]
+      summary: 删除图片
+      description: |
+        永久删除图片及其所有缩略图版本。
+        
+        ## 修复内容
+        - 修复缺陷001：多图上传超限后，已传图片的删除按钮应保持可用
+        - 生成操作记录："用户A 删除了图片 {filename}"
+      operationId: deleteImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+          description: 工作区ID
+          example:
+            - value: ws_project_alpha_001
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^img_[a-zA-Z0-9_]+$'
+          description: 图片ID
+          example:
+            - value: img_abc123def456
+
+      responses:
+        '204':
+          description: 删除成功
+          headers:
+            X-Audit-Log-Id:
+              schema:
+                type: string
+              example:
+                - value: audit_delete_20241108_001
+                  summary: 删除操作日志ID
+        '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ========================
+  # 【AuditLog】查询操作记录
+  # ========================
+  /workspaces/{workspaceId}/audit-logs:
+    get:
+      tags: [AuditLog]
+      summary: 查询图片相关操作记录
+      description: |
+        查询指定工作区内的图片上传、删除、替换、旋转等操作记录。
+        
+        ## 修复内容
+        - 修复缺陷002：确保旋转操作被记录
+      operationId: getImageAuditLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ws_[a-zA-Z0-9_]+$'
+          description: 工作区ID
+        - name: imageId
+          in: query
+          schema:
+            type: string
+          description: 过滤指定图片的操作记录
+        - name: operationType
+          in: query
+          schema:
+            type: string
+            enum: [upload, delete, replace, rotate]
+          description: 过滤操作类型
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 开始时间
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 结束时间
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+          description: 返回数量限制
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: 偏移量
+
+      responses:
+        '200':
+          description: 操作记录列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: 总记录数
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperationLog'
+              example:
+                - value:
+                    total: 3
+                    logs:
+                      - id: log_20251108_001
+                        timestamp: "2025-11-08T10:30:00Z"
+                        userId: usr_zhangsan_001
+                        userName: 张三
+                        operationType: upload
+                        objectType: image
+                        objectId: img_abc123def456
+                        objectName: 产品设计稿_v2.png
+                        details: {}
+                        ipAddress: "192.168.1.100"
+                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                      - id: log_20251108_002
+                        timestamp: "2025-11-08T11:00:00Z"
+                        userId: usr_zhangsan_001
+                        userName: 张三
+                        operationType: rotate
+                        objectType: image
+                        objectId: img_abc123def456
+                        objectName: 产品设计稿_v2.png
+                        details:
+                          angle: 90
+                        ipAddress: "192.168.1.100"
+                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ========================
+  # 【Knowledge】语义搜索
+  # ========================
+  /knowledge/search:
+    post:
+      tags: [Knowledge]
+      summary: 语义搜索知识库
+      description: |
+        基于语义理解搜索缺陷、需求、API文档、代码注释等知识。
+        
+        ## 修复内容
+        - 修复缺陷005：自然语言搜索无法命中语义相似的历史缺陷
+        - 修复缺陷009：过时文档不应在默认结果中展示
+      operationId: semanticSearch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeSearchRequest'
+            example:
+              - value:
+                  query: "图片旋转没记录"
+                  filters:
+                    type: ["bug"]
+                    status: "active"
+                  limit: 10
+                  includeArchived: false
+                summary: 搜索旋转相关缺陷
+
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                    description: 原始查询
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KnowledgeItem'
+                  total:
+                    type: integer
+                    description: 匹配总数
+              example:
+                - value:
+                    query: "图片旋转没记录"
+                    results:
+                      - id: "BUG-2041"
+                        type: "bug"
+                        title: "旋转操作未落库"
+                        content: "图片旋转操作未生成操作记录，审计缺失..."
+                        source: "缺陷报告系统"
+                        createdAt: "2025-11-05T15:10:00Z"
+                        updatedAt: "2025-11-05T15:10:00Z"
+                        status: "active"
+                        score: 0.92
+                        tags: ["audit", "image", "rotation"]
+                    total: 1
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ========================
+  # 【Onboarding】获取引导提示
+  # ========================
+  /onboarding/tips:
+    get:
+      tags: [Onboarding]
+      summary: 获取新功能引导提示
+      description: |
+        根据用户环境和历史行为，返回合适的引导提示。
+        
+        ## 修复内容
+        - 修复缺陷014：新功能上线后缺少对用户的主动引导
+      operationId: getOnboardingTips
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feature
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [image_upload_preview]
+          description: 功能标识
+        - name: X-Client-Environment
+          in: header
+          schema:
+            type: string
+            enum: [web, feishu_webview, ios_app, android_app]
+          description: 客户端环境
+
+      responses:
+        '200':
+          description: 引导提示列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tips:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OnboardingTip'
+              example:
+                - value:
+                    tips:
+                      - id: "tip_image_preview_001"
+                        type: "bubble"
+                        title: "图片上传预览"
+                        content: "现在上传图片后可立即预览，支持放大、旋转、删除操作"
+                        targetElement: ".upload-area"
+                        position: "top"
+                        priority: 5
+                        showOnce: true
+                        dismissed: false
+        '204':
+          description: 无可用引导提示
+
+  # ========================
+  # 【Environment】环境检测
+  # ========================
+  /environment/capabilities:
+    get:
+      tags: [Environment]
+      summary: 检测客户端环境能力
+      description: |
+        检测客户端浏览器/设备的兼容性，返回支持的功能列表。
+        
+        ## 修复内容
+        - 修复缺陷003：iOS Safari下长按事件处理
+        - 修复缺陷017：飞书内嵌页面拖拽功能
+        - 修复缺陷016：Android Chrome双指缩放性能
+      operationId: getEnvironmentCapabilities
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-User-Agent
+          in: header
+          schema:
+            type: string
+          description: 用户代理字符串
+
+      responses:
+        '200':
+          description: 环境能力报告
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  browser:
+                    type: string
+                    description: 浏览器类型
+                  version:
+                    type: string
+                    description: 浏览器版本
+                  os:
+                    type: string
+                    description: 操作系统
+                  capabilities:
+                    type: object
+                    properties:
+                      dragDrop:
+                        type: boolean
+                        description: 是否支持原生拖拽
+                      touchEvents:
+                        type: boolean
+                        description: 是否支持触摸事件
+                      longPress:
+                        type: boolean
+                        description: 是否支持长按事件
+                      cssTransform:
+                        type: boolean
+                        description: 是否支持CSS Transform硬件加速
+                      webp:
+                        type: boolean
+                        description: 是否支持WebP格式
+                      webgl:
+                        type: boolean
+                        description: 是否支持WebGL
+                  recommendedWorkarounds:
+                    type: array
+                    items:
+                      type: string
+                    description: 推荐的兼容性方案
+              example:
+                - value:
+                    browser: "Safari"
+                    version: "15.4"
+                    os: "iOS 15"
+                    capabilities:
+                      dragDrop: false
+                      touchEvents: true
+                      longPress: true
+                      cssTransform: true
+                      webp: true
+                      webgl: true
+                    recommendedWorkarounds:
+                      - "使用touch事件代替mouse事件"
+                      - "实现自定义长按检测"
+                      - "使用飞书SDK文件选择API"

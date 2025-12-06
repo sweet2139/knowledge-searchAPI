@@ -1,0 +1,554 @@
+缺陷报告 001：多图上传超限后 UI 组件整体禁用导致无法删除已传图片
+【前提条件*】  
+环境：UAT环境  
+应用版本：项目管理 - 商业版 v4.3.0  
+出现时间：2025-11-05 14:30
+【复现步骤*】  
+1. 进入任意工作项（如需求 R-1001）的评论区；  
+2. 点击“上传图片”按钮，选择4张符合格式要求（jpg/png/gif/webp）、单张小于5MB的图片；  
+3. 系统成功上传并回显前3张图片缩略图；  
+4. 尝试上传第4张图片（在Free或Standard版本下触发数量限制）；  
+5. 观察上传按钮及已上传图片的操作控件状态。
+【当前表现*】  
+第4张图片被拦截并提示“当前版本单次最多上传3张图片”，但“上传图片”按钮变为置灰不可点击状态，且已上传的3张图片的“删除”按钮也失效，用户无法进行任何后续操作，只能取消整个评论。
+【预期表现*】  
+达到上传上限时应拦截新增上传，但已上传内容的操作功能需保持可用。“上传图片”按钮应仍可点击（允许用户尝试但提示先删除旧图），已上传图片的“删除”按钮必须正常工作，支持用户腾出空间继续上传。
+【其他补充】  
+user_mail：test_user@company.com  
+租户id：tenant_12345  
+应用namespace：not_applicable  
+logid：log_img_upload_quota_disabled_ui_001  
+发生时间点：2025-11-05 14:30:00 UTC+8  
+抓包信息：  
+POST /api/v1/attachments/upload → 200 OK (前三张)
+POST /api/v1/attachments/upload → 403 Forbidden (第四张), response: {"error": "exceeds upload limit"}
+DOM 元素 class="upload-btn" 被添加 disabled 样式，所有 .delete-icon display:none
+错误截图/录屏：https://cdn.company.com/bug-screenshots/upload-btn-disabled-after-limit.png  
+根因分析（初步）：前端组件在检测到上传失败后错误地将整个模块设为 disabled，未分离控制逻辑  
+影响范围：Meegle Free 和 Standard 版本用户在多图协作中受影响  
+建议优先级：P1（阻塞性问题）  
+修复建议：解耦上传入口与已上传项的状态控制，仅禁用新增上传行为  
+SLA等级：P1  
+AI 推荐标签：ui-state-bug, upload-limit-handling, delete-button-disabled, frontend-validation-bug
+
+缺陷报告 002：图片旋转操作未生成操作记录，审计缺失
+【前提条件*】  
+环境：Pre环境  
+应用版本：大图查看器模块 v2.1.0  
+出现时间：2025-11-05 15:10
+【复现步骤*】  
+1. 在缺陷表单的“附件”区域上传一张图片 `bug_screenshot.png`；  
+2. 上传成功后点击缩略图进入大图查看器；  
+3. 点击底部“旋转”按钮两次（累计旋转180°）；  
+4. 关闭查看器并提交表单；  
+5. 查看该缺陷的“操作记录”面板是否包含旋转行为记录。
+【当前表现*】  
+操作记录中仅显示“用户A 上传了图片：bug_screenshot.png”，无任何关于“旋转”的记录，无法追溯修改历史。
+【预期表现*】  
+每次旋转操作均应记录，操作记录中应新增一条日志：“用户A 旋转了图片 bug_screenshot.png（180°）”，确保所有关键操作可审计、可追溯。
+【其他补充】  
+user_mail：qa_wang@company.com  
+租户id：tenant_67890  
+应用namespace：not_applicable  
+logid：log_operation_log_missing_rotate_002  
+发生时间点：2025-11-05 15:10:25 UTC+8  
+抓包信息：  
+PUT /api/v1/images/img-abc123/rotate → 200 OK
+Request: { angle: 180 }
+Event fired: image_upload_rotate_click → sent to analytics
+但后端 operation_log 表未插入新记录
+错误截图/录屏：https://cdn.company.com/bug-screenshots/no-rotate-log-in-record.png  
+根因分析（初步）：前端调用了 rotate 接口并上报埋点，但后端未监听该事件写入操作日志  
+影响范围：所有需要审计图片修改历史的合规、评审场景  
+建议优先级：P2  
+修复建议：在 ImageController 中增加对 rotate 动作的日志落库逻辑  
+SLA等级：P2  
+AI 推荐标签：missing-operation-log, audit-trail-gap, rotate-no-record
+
+缺陷报告 003：iOS Safari 下长按缩略图未弹出自定义操作菜单
+【前提条件*】  
+环境：BOE环境  
+应用版本：移动端 Meego App v3.8.0 (iOS)  
+出现时间：2025-11-06 10:45
+【复现步骤*】  
+1. 使用 iPhone 设备（iOS 15+），Safari 浏览器访问 Meego；  
+2. 进入任务详情页并切换至编辑模式；  
+3. 在“封面图”上传区域上传一张图片；  
+4. 图片上传成功生成缩略图后，长按该缩略图；  
+5. 观察是否弹出 Meego 自定义操作菜单（删除、替换、旋转）。
+【当前表现*】  
+长按缩略图时触发系统默认上下文菜单（如“保存图像”、“拷贝”等），未出现 Meego 定义的操作菜单，用户无法执行删除、替换或旋转操作。
+【预期表现*】  
+在移动端长按缩略图应弹出 Action Sheet 菜单，包含“删除”、“替换”、“旋转”选项，实现与 PC hover 对等功能体验。
+【其他补充】  
+user_mail：mobile_tester_li@company.com  
+租户id：tenant_12345  
+应用namespace：meego-mobile-app  
+logid：log_mobile_longpress_not_work_003  
+发生时间点：2025-11-06 10:45:12 UTC+8  
+抓包信息：N/A（前端交互）  
+错误截图/录屏：https://cdn.company.com/bug-screenshots/ios-longpress-system-menu-only.png  
+根因分析（初步）：未正确绑定 touchstart + touchend 模拟 longpress，且未调用 event.preventDefault() 阻止默认行为  
+影响范围：使用 iOS Safari 的移动端用户群体（约占活跃用户的18%）  
+建议优先级：P2  
+修复建议：实现自定义 directive `v-longpress`，绑定事件并阻止 contextmenu  
+SLA等级：P2  
+AI 推荐标签：mobile-touch-event, ios-safari-compatibility, longpress-missing, cross-platform-ux
+
+缺陷报告 004：前端未消费 API 新增 metadata 字段导致水印未显示
+【前提条件*】  
+环境：Pre环境  
+应用版本：前端组件 ImageUploader v1.4.2  
+出现时间：2025-11-06 16:20
+【复现步骤*】  
+1. 进入任务详情页的“附件”区域；  
+2. 上传一张图片 `test_diagram.png`；  
+3. 查看上传成功后的缩略图是否显示水印“已审核”。
+【当前表现*】  
+上传成功，但缩略图上未显示“已审核”水印。控制台无报错。
+【预期表现*】  
+根据新版 API 文档 `/api/v1/attachments/upload` 返回字段 `metadata.audit_status = approved`，前端应在缩略图右下角叠加绿色“已审核”标签。
+【其他补充】  
+user_mail：dev_zhang@company.com  
+租户id：tenant_67890  
+应用namespace：not_applicable  
+logid：log_frontend_not_render_audit_badge_004  
+发生时间点：2025-11-06 16:20:33 UTC+8  
+抓包信息：  
+Response: { "file_id": "att-abc123", "url": "https://cdn.meego.com/...", "metadata": { "audit_status": "approved" } } → 前端未解析 metadata 字段渲染 badge
+错误截图/录屏：https://cdn.company.com/bug-screenshots/no-audit-badge-on-thumb.png  
+根因分析（初步）：前端未订阅 metadata 字段变化，缺少 renderAuditBadge() 方法  
+影响范围：所有启用审核流程的企业客户  
+建议优先级：P2  
+修复建议：在 ImagePreview 组件中增加 metadata 监听逻辑，并动态渲染 badge  
+SLA等级：P2  
+AI 推荐标签：api-field-not-consumed, frontend-rendering-bug, badge-missing
+
+缺陷报告 005：自然语言搜索无法命中语义相似的历史缺陷
+【前提条件*】  
+环境：UAT环境  
+应用版本：质量中心 - v3.1.0  
+出现时间：2025-11-07 09:15
+【复现步骤*】  
+1. 在“缺陷管理”模块搜索框输入“图片旋转没记录”；  
+2. 观察结果是否包含标题为“旋转操作未落库”的历史缺陷 BUG-2041。
+【当前表现*】  
+搜索结果为空。仅当完全匹配“旋转操作未落库”时才可查到。
+【预期表现*】  
+系统应基于语义理解，将“图片旋转没记录”匹配至“旋转操作未落库”，即使字面不同也应返回相关结果。
+【其他补充】  
+user_mail：ai_engineer_chen@company.com  
+租户id：tenant_global  
+应用namespace：knowledge-search-engine  
+logid：log_semantic_search_failed_005  
+发生时间点：2025-11-07 09:15:44 UTC+8  
+抓包信息：  
+GET /api/v1/bugs?keyword=图片旋转没记录 → hits: [] DB Query: SELECT * FROM bugs WHERE title LIKE '%...' → 无命中
+错误截图/录屏：https://cdn.company.com/bug-screenshots/search-no-result-for-natural-lang.png  
+根因分析（初步）：当前仅使用关键词模糊匹配，未引入 Sentence-BERT 类语义模型  
+影响范围：测试人员查找历史问题效率低，新人学习成本高  
+建议优先级：P2  
+修复建议：接入语义向量引擎，建立标题与描述的 embedding 索引  
+SLA等级：P2  
+AI 推荐标签：semantic-search-failure, fuzzy-match-missing, natural-lang-support-needed
+
+缺陷报告 006：代码注释中的 TODO 未被纳入知识抽取流程
+【前提条件*】  
+环境：内部代码仓库（GitLab）  
+应用版本：frontend/components/ImageUploader.vue @ commit abc123  
+出现时间：2025-11-07 14:00
+【复现步骤*】  
+1. 启动知识混合检索系统的“代码知识抽取”Job；  
+2. 抽取 `ImageUploader.vue` 文件内容；  
+3. 查询知识库中是否包含注释：“// TODO: 移动端需实现 longpress 替代 hover”。
+【当前表现*】  
+该注释未出现在任何知识片段中，未被解析或索引。
+【预期表现*】  
+所有带有业务含义的注释（如TODO、FIXME、NOTE）应被提取并转化为知识条目，供后续检索使用。
+【其他补充】  
+user_mail：knowledge_bot@system.com  
+租户id：system_internal  
+应用namespace：gitlab/frontend  
+logid：log_code_comment_not_indexed_006  
+发生时间点：2025-11-07 14:00:00 UTC+8  
+抓包信息：N/A  
+错误截图/录屏：https://cdn.company.com/bug-screenshots/code-comment-not-indexed.png  
+根因分析（初步）：知识抽取工具未配置 AST 解析器，仅做正则扫描  
+影响范围：技术债务、待办事项丢失风险  
+建议优先级：P3  
+修复建议：集成 Babel AST 工具，识别 // TODO: 并提取上下文  
+SLA等级：P3  
+AI 推荐标签：code-comment-not-indexed, tech-debt-untracked, todo-lost-in-code
+
+缺陷报告 007：设计稿中标注的“双击缩放”未转化为测试用例
+【前提条件*】  
+环境：Figma + UAT  
+应用版本：Figma #figma-img-viewer-interactions  
+出现时间：2025-11-08 10:30
+【复现步骤*】  
+1. 查阅 Figma 设计稿中“双击缩放”交互说明；  
+2. 在测试管理系统中搜索 TC-DOUBLE-CLICK-ZOOM。
+【当前表现*】  
+无对应测试用例存在。
+【预期表现*】  
+设计稿中的关键交互应自动触发测试用例创建提醒。
+【其他补充】  
+user_mail：ux_designer_zhou@company.com  
+租户id：design_team_a  
+应用namespace：figma/project-meego-ui  
+logid：log_design_to_test_gap_007  
+发生时间点：2025-11-08 10:30:15 UTC+8  
+抓包信息：N/A  
+错误截图/录屏：https://cdn.company.com/bug-screenshots/design-interaction-not-tested.png  
+根因分析（初步）：缺乏设计稿自动化解析机制  
+影响范围：重要交互遗漏测试  
+建议优先级：P3  
+修复建议：开发 Figma 插件提取交互说明，推送至测试平台  
+SLA等级：P3  
+AI 推荐标签：design-to-test-gap, interaction-not-tested, double-click-zoom
+
+缺陷报告 008：API 错误码未定义导致前端异常提示不明确
+【前提条件*】  
+环境：Pre环境  
+应用版本：backend-service v3.2.1-hotfix-3  
+出现时间：2025-11-08 13:50
+【复现步骤*】  
+1. 调用 `/api/v1/images/:id/rotate` 接口传入 angle=135；  
+2. 观察返回码和前端提示。
+【当前表现*】  
+返回 500 Internal Server Error，前端统一提示“服务异常”。
+【预期表现*】  
+应返回 400 + 错误码 IMG_ROTATE_INVALID_ANGLE，前端提示“旋转角度必须为90的倍数”。
+【其他补充】  
+user_mail：backend_dev_wu@company.com  
+租户id：svc-image-rotation  
+应用namespace：image-service  
+logid：log_api_error_code_missing_008  
+发生时间点：2025-11-08 13:50:22 UTC+8  
+抓包信息：  
+PUT /api/v1/images/img-abc123/rotate?angle=135 → 500 Internal Server Error No error code defined in OpenAPI spec
+错误截图/录屏：https://cdn.company.com/bug-screenshots/undefined-error-code.png  
+根因分析（初步）：API 文档未完善，服务端未校验参数合法性  
+影响范围：所有客户端无法区分网络错误与输入错误  
+建议优先级：P1  
+修复建议：补全 API 错误码文档，并在控制器中抛出 ValidationException  
+SLA等级：P1  
+AI 推荐标签：undefined-error-code, 500-on-invalid-input, error-handling-inconsistent
+
+缺陷报告 009：过时需求文档仍被搜索引擎优先返回
+【前提条件*】  
+环境：Knowledge Portal  
+应用版本：v2.5  
+出现时间：2025-11-08 16:00
+【复现步骤*】  
+1. 搜索“图片上传预览方案”；  
+2. 查看首条结果。
+【当前表现*】  
+返回已废弃的 V1 draft 文档。
+【预期表现*】  
+已归档文档不应在默认结果中展示，除非用户主动筛选“包含历史版本”。
+【其他补充】  
+user_mail：pm_zhang@company.com  
+租户id：tenant_global  
+应用namespace：knowledge-repo  
+logid：log_stale_doc_rank_high_009  
+发生时间点：2025-11-08 16:00:12 UTC+8  
+抓包信息：N/A  
+错误截图/录屏：https://cdn.company.com/bug-screenshots/stale-doc-in-top-rank.png  
+根因分析（初步）：未设置文档 status 字段，向量数据库未降权 stale 内容  
+影响范围：新人易参考错误方案  
+建议优先级：P3  
+修复建议：为文档添加 `status: archived`, `valid_until` 字段，检索时过滤  
+SLA等级：P3  
+AI 推荐标签：stale-doc-rank-high, knowledge-archiving-missing, version-control-gap
+
+缺陷报告 010：用户反馈未聚类分析，高频问题模式未沉淀
+【前提条件*】  
+环境：客服后台  
+应用版本：Feedback Analyzer v1.3  
+出现时间：2025-11-09 09:50
+【复现步骤*】  
+1. 分析近一周反馈；  
+2. 搜索“传不了图”“看不到预览”。
+【当前表现*】  
+未聚类，分散在多个工单中。
+【预期表现*】  
+应自动生成“高频问题模式”知识条目，如“移动端iOS图片加载失败”。
+【其他补充】  
+user_mail：cs_manager_lin@company.com  
+租户id：support_system  
+应用namespace：feedback-db/tickets  
+logid：log_feedback_not_clustered_010  
+发生时间点：2025-11-09 09:50:28 UTC+8  
+抓包信息：N/A  
+错误截图/录屏：https://cdn.company.com/bug-screenshots/user-feedback-scattered.png  
+根因分析（初步）：缺乏 Embedding 聚类算法支持  
+影响范围：产品团队难以识别趋势性问题  
+建议优先级：P2  
+修复建议：引入 Sentence-Transformers 对反馈向量化聚类  
+SLA等级：P2  
+AI 推荐标签：feedback-not-clustered, common-issue-pattern-missed, cds-cache-problem
+
+缺陷报告 011：租户降级后，替换历史超限图片时缺乏前置容量校验提示
+【前提条件*】
+环境：UAT环境
+应用版本：图片上传回显功能 v1.0
+出现时间：2025-11-08 14:30
+【复现步骤*】
+1.租户从 Premium 版（支持20MB）降级至 Standard 版（支持10MB）。
+2.用户打开一个含有历史15MB图片的工作项。
+3.该图片缩略图正常显示。
+4.用户点击缩略图上的“替换”按钮，选择一张12MB的新图片并确认。
+5.观察系统交互与提示。
+【当前表现*】
+系统开始上传12MB文件，在上传完成后或提交时返回错误：“图片大小超出限制（当前版本最大支持10MB）”。用户体验断裂，未能提前阻止无效操作。
+【预期表现*】
+根据需求文档“容量类权益处理逻辑”中“仅限制新增上传图片的容量”的原则，替换操作应视为对“已有图片”的修改。应在用户选择新文件后、上传开始前进行前端预校验。如果新文件超出当前版本限制，应立即提示：“新图片超出当前版本限制（最大10MB），无法替换”，并取消操作。
+【其他补充】
+user_mail：admin_user@corp.com
+租户id：tenant_downgrade_001
+logid：log_downgrade_replace_no_precheck_011
+发生时间点：2025-11-08 14:30:15
+抓包信息：PUT /api/v1/images/img-abc123/replace 请求失败，返回 403 {"error": "file_size_exceeded", "max_size_mb": 10}
+根因分析（初步）： 前端在选择文件后未调用 /api/v1/tenant/quota/validate 接口进行预校验，直接上传
+影响范围： 降级租户的所有用户在进行图片替换操作时
+建议优先级：P2
+修复建议： 在选择文件后、上传前调用校验接口，若超限则前端直接提示并阻止上传
+SLA等级： P2
+AI 推荐标签： downgrade-validation-missing, replace-operation-unchecked, quota-precheck-needed
+
+缺陷报告 012：小屏设备下，缩略图未按响应式规则缩小
+【前提条件*】
+环境：BOE环境
+应用版本：图片上传组件 v1.2.0
+出现时间：2025-11-09 11:15
+【复现步骤*】
+1.在PC端浏览器（如Chrome）中打开一个含有图片上传表单的页面。
+2.上传一张图片，观察其缩略图尺寸。
+3.将浏览器窗口宽度手动调整至小于768px。
+4.观察缩略图尺寸是否变化。
+【当前表现*】
+缩略图尺寸保持为初始的200px×200px（表单区）或120px×120px（评论区），未按照需求文档“跨端兼容性要求”中定义的规则进行自适应缩小。
+【预期表现*】
+当屏幕宽度小于768px时，表单/详情页的缩略图应自动调整为最大150px×150px，评论区的缩略图应调整为最大100px×100px，且保持宽高比。
+【其他补充】
+user_mail：frontend_dev@corp.com
+租户id：tenant_responsive_test
+logid：log_thumbnail_not_responsive_012
+发生时间点：2025-11-09 11:15:40
+抓包信息： N/A (纯CSS/前端布局问题)
+根因分析（初步）： .thumbnail-container 的CSS缺少 @media (max-width: 768px) 媒体查询规则
+影响范围： 所有在移动端或小屏PC端使用图片上传功能的用户
+建议优先级：P2
+修复建议： 为 .thumbnail-container 添加响应式CSS规则：@media (max-width: 768px) { max-width: 150px; }
+SLA等级： P2
+AI 推荐标签： responsive-css-missing, thumbnail-size-fixed, mobile-layout-broken
+
+缺陷报告 013：大图查看器中“下载原图”按钮下载的是缩放后的视图，而非原始文件
+【前提条件*】
+环境：Pre环境
+应用版本：大图查看器 v2.0.1
+出现时间：2025-11-10 09:45
+【复现步骤*】
+1.进入大图查看器。
+2.使用滚轮或触控将图片放大至300%。
+3.可能平移图片，使某个局部成为视图中心。
+4.点击底部工具栏的“下载原图”按钮。
+5.检查下载文件的属性（尺寸、大小）。
+【当前表现*】
+下载的文件是当前视窗内显示的图像区域，且分辨率受缩放影响。例如，原始图为1920x1080，放大后下载的可能是960x540的局部图像。
+【预期表现*】
+无论查看器处于何种缩放、平移状态，“下载原图”按钮应始终触发下载服务器上存储的、未经修改的原始图片文件。
+【其他补充】
+user_mail：user_download@client.com
+租户id：tenant_support_team 
+logid：log_download_zoomed_view_not_original_013
+发生时间点：2025-11-10 09:45:22
+抓包信息： GET /api/v1/images/img-abc123?size=viewport&zoom=3.0 而非期望的 GET /api/v1/images/img-abc123/download
+根因分析（初步）： 下载按钮的点击事件绑定了错误的URL，使用了当前视图状态的查询参数
+影响范围： 所有在大图查看器中下载图片的用户
+建议优先级：P2
+修复建议： 修复下载按钮的href属性，始终指向原始文件的下载端点 /api/v1/images/{id}/download
+SLA等级： P2
+AI 推荐标签： download-wrong-url, viewport-download-bug, original-file-missing
+
+缺陷报告 014：新功能上线后，缺少对用户的主动引导和功能提示
+【前提条件*】
+环境：生产环境 (灰度发布阶段)
+应用版本：图片上传回显功能 v1.0
+出现时间：2025-11-10 10:00 (功能上线首日)
+【复现步骤*】
+1.新用户或长时间未登录的老用户首次进入带有图片上传功能的页面（如创建缺陷表单）。
+2.观察页面是否有关于“图片上传后可预览”的新功能提示。
+【当前表现*】
+页面无任何引导性提示（如需求文档“引导策略”中计划的气泡提示、公告或“？”帮助图标）。用户可能完全不知道新功能的存在，仍按旧习惯操作。
+【预期表现*】
+应按照需求文档“引导策略”和“Onboarding上新”的规划，在功能上线初期，通过非侵入式气泡、页面公告或在上传区域添加帮助图标等方式，主动告知用户新功能，提升功能渗透率。
+【其他补充】
+user_mail：new_user@client.com
+租户id：tenant_onboarding_alpha
+logid：log_missing_new_feature_onboarding_014
+发生时间点=2025-11-10 10:00:00
+抓包信息： N/A
+根因分析（初步）： 功能上线时未激活引导系统的配置，或用户首次访问标记未正确设置
+影响范围： 所有新用户和老用户，影响功能发现和使用率
+建议优先级：P2
+修复建议： 检查并激活引导系统配置，设置合理的首次访问检测逻辑
+SLA等级： P2
+AI 推荐标签： onboarding-config-missing, feature-discovery-low, user-guidance-absent
+
+缺陷报告 015：图片上传成功后，缩略图信息栏的文件名过长时未正确显示省略号
+【前提条件*】
+环境：UAT环境
+应用版本：图片上传回显基础组件 v1.1
+出现时间：2025-11-11 16:20
+【复现步骤*】
+1.上传一张文件名很长的图片。
+2.观察缩略图下方显示的文件名。
+【当前表现*】
+文件名撑破了布局容器，导致缩略图区域宽度异常，或与相邻元素重叠，破坏了页面整洁性。
+【预期表现*】
+应按照需求文档“方案详情-缩略图规则”中“缩略图下方显示图片名称（超出部分省略号显示）”的要求，对过长的文件名进行截断，并以“…”结尾。
+【其他补充】
+user_mail：tester_longname@corp.com
+租户id：tenant_ui_test
+logid：log_filename_overflow_no_ellipsis_015
+发生时间点：2025-11-11 16:20:30
+抓包信息： N/A (前端渲染问题)
+根因分析（初步）： 文件名容器的CSS缺少 text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+影响范围： 上传长文件名图片的所有用户
+建议优先级：P3
+修复建议： 为文件名容器添加CSS省略号样式
+SLA等级： P3
+AI 推荐标签： css-ellipsis-missing, text-overflow-bug, ui-layout-overflow
+
+缺陷报告 016：移动端Android Chrome浏览器下，双指缩放大图时操作不跟手，有延迟和卡顿
+【前提条件*】
+环境：BOE环境 (移动端真机测试)
+应用版本：移动端 Meego H5 v3.9.0
+出现时间：2025-11-12 13:50
+【复现步骤*】
+1.在Android设备（如小米， Android 12）的Chrome浏览器中打开Meego。
+2.进入大图查看器。
+3.尝试使用双指进行捏合缩放操作。
+【当前表现*】
+图片缩放有明显的延迟和卡顿感，手指移动与图片缩放不同步，体验不流畅。不符合需求文档“竞品分析”中强调的“操作流畅”和“保障不同设备体验一致”的目标。
+【预期表现*]
+双指缩放操作应平滑、跟手，响应延迟在可接受范围内（如小于100ms），与主流竞品（如飞书文档）的体验保持一致。
+【其他补充】
+user_mail:mobile_tester_android@corp.com
+租户id:tenant_mobile_qa
+logid:log_android_pinch_zoom_lag_016
+发生时间点:2025-11-12 13:50:15
+附性能监测截图显示帧率过低。
+抓包信息： N/A (前端性能问题)
+根因分析（初步）： 图片缩放计算在JS主线程执行，未使用transform的GPU加速，导致渲染帧率低
+影响范围： Android Chrome用户的图片查看体验
+建议优先级：P2
+修复建议： 使用CSS transform: scale() 配合 will-change: transform 进行硬件加速
+SLA等级： P2
+AI 推荐标签： android-performance-issue, touch-zoom-lag, render-fps-low
+
+缺陷报告 017：在飞书内嵌页面中，图片上传区域的拖拽功能失效
+【前提条件*】
+环境：Pre环境 (飞书客户端内)
+应用版本：飞书集成适配层 v1.0.2
+出现时间：2025-11-13 11:10
+【复现步骤*】
+1.在飞书PC客户端的侧边栏或聊天窗口中，打开内嵌的Meego应用页面。
+2.进入一个可以上传图片的表单。
+3.尝试从本地文件夹拖拽一张图片到上传区域。
+【当前表现*】
+拖拽行为无效，页面无任何反应。只能通过点击按钮选择文件。需求文档“方案详情-图片上传回显基础逻辑”中定义的“拖拽上传”方式在飞书环境不可用。
+【预期表现*】
+应确保在飞书内嵌环境下，拖拽上传功能与在独立浏览器中保持一致，能够正常触发并回显图片。
+【其他补充】
+user_mail:feishu_user@corp.com
+租户id:tenant_feishu_integration 
+logid:log_feishu_drag_drop_fail_017
+发生时间点:2025-11-13 11:10:05
+抓包信息： 飞书Webview未触发 dragover 和 drop 事件
+根因分析（初步）： 飞书内嵌环境的安全策略可能限制了原生的文件拖拽API
+影响范围： 飞书内使用Meego应用的用户
+建议优先级：P2
+修复建议： 检测飞书环境，使用飞书SDK提供的文件选择API作为备选方案
+SLA等级： P2
+AI 推荐标签： feishu-webview-restriction, drag-drop-api-blocked, embedded-browser-issue
+
+缺陷报告 018：GIF格式图片上传后，缩略图显示为静态第一帧，无法预览动画效果
+【前提条件*】
+环境：UAT环境
+应用版本：图片上传回显功能 v1.0
+出现时间：2025-11-13 15:30
+【复现步骤*】
+1.上传一张动态GIF图片（如一个加载动画或演示步骤的动图）。
+2.观察生成的缩略图。
+3.点击缩略图进入大图查看器。
+【当前表现*】
+在缩略图状态和大图查看器初始状态下，GIF图片均显示为静态第一帧，不会自动播放动画。用户无法在预览阶段确认GIF的内容是否正确。
+【预期表现*】
+根据需求文档FAQ“支持哪些图片格式的回显？”中明确包含gif格式，系统应支持GIF动画的预览。缩略图可以是静态首帧，但点击进入大图查看器后，GIF应自动开始播放，或至少提供播放/暂停的控制按钮。
+【其他补充】
+user_mail:designer_gif@corp.com 
+租户id:tenant_design_team
+logid:log_gif_not_animated_in_preview_018 
+发生时间点:2025-11-13 15:30:45
+抓包信息： N/A
+根因分析（初步）： 大图查看器组件未针对GIF格式设置自动播放属性
+影响范围： 上传GIF动图的所有用户
+建议优先级：P2
+修复建议： 在大图查看器中检测GIF格式，为img标签添加 autoplay 属性或使用video标签渲染
+SLA等级： P2
+AI 推荐标签： gif-autoplay-missing, animated-image-preview-broken, format-handling-incomplete
+
+缺陷报告 019：多图上传超过9张时，“9+”标识点击后无法“展开全部”
+【前提条件*】
+环境：BOE环境
+应用版本：图片上传回显功能 v1.0
+出现时间：2025-11-14 09:20
+【复现步骤*】
+1.在评论区一次性上传12张图片。
+2.上传完成后，界面显示9张缩略图和一个“9+”的叠加标识。
+3.点击“9+”标识。
+【当前表现*】
+点击“9+”标识无任何反应。所有超过9张的图片（第10、11、12张）永远无法在界面上直接看到其缩略图，用户只能通过点击前9张进入大图查看器后左右切换来查看。这违背了需求文档“方案详情”中“点击展开全部”的设计。
+【预期表现*】
+点击“9+”标识后，应在当前区域（或通过弹层、展开动画）展示所有已上传图片的缩略图，使用户能一览无余。
+【其他补充】
+user_mail:user_multi_upload@corp.com 
+租户id:tenant_collab_beta
+logid:log_9plus_expand_not_working_019 
+发生时间点=2025-11-14 09:20:10
+抓包信息： N/A
+根因分析（初步）： "9+"标识的元素未绑定点击事件处理函数
+影响范围： 上传超过9张图片的用户
+建议优先级：P2
+修复建议： 为"9+"标识元素添加click事件监听，触发显示所有缩略图的逻辑
+SLA等级： P2
+AI 推荐标签： expand-all-click-broken, multi-image-layout-bug, ui-event-missing
+
+缺陷报告 020：当连续快速点击“旋转”按钮时，图片会出现错乱或旋转角度计算错误
+【前提条件*】
+环境：Pre环境
+应用版本：图片编辑操作组件 v1.3.0
+出现时间：2025-11-14 14:05
+【复现步骤*】
+1.上传一张图片。
+2.将鼠标悬停在缩略图上，快速连续点击“旋转”按钮4-5次。
+3.观察图片最终的旋转状态。
+【当前表现*】
+图片旋转动画混乱，最终停止的角度可能不是90°的整数倍（例如270°或0°），或者旋转过程出现跳跃。需求文档“图片编辑操作”中定义的“顺时针旋转90°递增”的规则在快速操作下失效。
+【预期表现*】
+无论用户点击多快，每次点击都应作为一次独立的90°顺时针旋转命令被顺序、正确地执行。前端应有防抖或队列机制，确保旋转状态最终保持一致性和正确性。
+【其他补充】
+user_mail：power_user@corp.com 
+租户id：tenant_stress 
+logid：log_rapid_rotate_state_error_020 
+发生时间点：2025-11-14 14:05:30
+抓包信息： 快速连续发送多个 PUT /api/v1/images/img-abc123/rotate 请求，角度累加混乱
+根因分析（初步）： 前端未对旋转操作进行防抖/节流，且基于本地过时状态计算旋转角度
+影响范围： 所有进行快速旋转操作的用户
+建议优先级：P2
+修复建议： 对旋转按钮添加防抖逻辑，并基于服务器最新响应更新旋转状态
+SLA等级： P2
+AI 推荐标签： debounce-missing, state-sync-race, ui-update-conflict

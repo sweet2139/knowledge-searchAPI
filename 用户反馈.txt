@@ -1,0 +1,241 @@
+用户反馈01：语义搜索未能识别自然语言相似性，仅依赖关键词匹配
+【前提条件*】
+环境：UAT环境
+应用版本：知识混合检索系统 v1.2.0，语义引擎版本：sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+出现时间：2025-11-10 14:20:15
+【复现步骤*】
+1. 在知识门户“智能检索”页面，输入查询语句：“图片旋转没记录”。
+2. 点击搜索按钮。
+3. 观察搜索结果列表。
+4. 验证是否返回缺陷报告“BUG-2041：旋转操作未落库”。
+【当前表现*】
+搜索结果为空，提示“未找到相关结果”。
+网络请求显示检索接口返回200 OK，但results数组为空。
+查询日志显示仅执行了关键词模糊匹配（LIKE '%图片%旋转%记录%'），未触发语义向量相似度计算。
+用户无法通过自然语言找到已知问题，必须精确记忆标题才能检索。
+【预期表现*】
+1. 应返回缺陷报告“BUG-2041：旋转操作未落库”，并显示语义匹配分数（如92%）。
+2. 检索结果应包含search_type: hybrid或semantic字段。
+3. 应提供查询建议：“您是否在查找：旋转操作未落库？”
+【其他补充】
+user_mail：ai_engineer_li@company.com
+租户id：tenant_knowledge_001
+应用namespace：knowledge-search-engine
+logid：log_semantic_search_fail_20251110_1420
+抓包信息：POST /api/v1/knowledge/search
+Body: {"query": "图片旋转没记录", "filters": {"type": ["bug"]}}
+Response: {"results": [], "total": 0, "search_type": "keyword"}
+发生时间点：2025-11-10 14:20:15 UTC+8
+根因分析：语义搜索开关未启用，向量引擎服务未启动，且存量知识条目未生成嵌入向量。
+建议优先级：P1
+修复建议：启用语义搜索功能，启动向量引擎，执行存量数据向量化任务。
+SLA等级：P1
+AI 推荐标签：semantic-search-disabled, vector-engine-down, embeddings-missing, nlp-feature-broken
+
+用户反馈02：代码注释（TODO/FIXME）未被知识抽取系统识别与索引
+【前提条件*】
+环境：BOE环境
+应用版本：知识抽取服务 v2.1.0，代码解析器：Babel 7.23.0
+出现时间：2025-11-11 09:30:45
+【复现步骤*】
+1. 在CI/CD流水线中触发“代码知识抽取”任务，扫描frontend/components/ImageUploader.vue。
+2. 任务完成后，在知识库中搜索注释“TODO: 移动端需实现 longpress 替代 hover”。
+3. 验证是否存在对应知识条目。
+【当前表现*】
+知识库中无对应条目。
+任务日志显示“已处理文件：1，成功抽取条目：0”。
+解析器仅提取了函数、组件声明，未捕获注释内容。
+【预期表现*】
+1. 应创建类型为code_comment的知识条目。
+2. 条目应包含文件路径、行号、作者、优先级等结构化信息。
+3. 条目应自动关联至“移动端兼容性”等主题标签。
+【其他补充】
+user_mail：dev_ops_zhao@company.com
+租户id：tenant_code_scan
+应用namespace：gitlab/frontend
+logid：log_code_comment_missing_20251111_0930
+抓包信息：[INFO] Using parser: regex (fallback mode)
+[INFO] No structured comments found.
+发生时间点：2025-11-11 09:30:45 UTC+8
+根因分析：解析器配置错误，使用正则回退模式，且依赖缺失。
+建议优先级：P2
+修复建议：修正解析器配置为babel-ast，安装必要依赖，完善回退逻辑。
+SLA等级：P2
+AI 推荐标签：ast-parser-misconfigured, npm-dependency-missing, tech-debt-invisible
+
+用户反馈03：图片替换请求缺失认证凭据，导致403错误且提示不明确
+【前提条件*】
+环境：Pre环境
+应用版本：Meego 图片上传回显功能 v1.0（Build 20251109）
+出现时间：2025-11-08 14:30:15
+【复现步骤*】
+1. 登录Pre环境，创建任务并上传图片（ID: img-abc123）。
+2. 进入编辑模式，点击“替换”按钮，选择12MB新文件。
+3. 系统发起PUT请求，请求头中无Authorization字段。
+4. 后端返回403 Forbidden，前端显示“操作失败，请重试”。
+【当前表现*】
+请求缺少认证token。
+响应体为{"error": "unauthorized", "message": "Authentication required"}。
+用户无法区分是权限问题还是文件大小问题。
+【预期表现*】
+1. 所有写操作请求必须携带有效的Bearer Token。
+2. 若会话过期，应引导重新登录。
+3. 错误提示应明确区分“权限不足”和“文件超限”。
+【其他补充】
+user_mail：admin_user@corp.com
+租户id：tenant_downgrade_001
+应用namespace：meego-task-edit-image-replace
+logid：log_replace_missing_auth_header_022
+抓包信息：PUT /api/v1/images/img-abc123/replace
+Headers: 无Authorization
+Response: 403 {"error":"unauthorized"}
+发生时间点：2025-11-08 14:30:15 UTC+8
+根因分析：前端组件未注入全局认证token。
+建议优先级：P1
+修复建议：在请求封装层统一注入Authorization头，添加401/403拦截器。
+SLA等级：P1
+AI 推荐标签：missing-auth-header, security-policy-violation, write-operation-unauthorized
+
+用户反馈04：移动端iOS长按缩略图触发系统菜单，无自定义操作选项
+【前提条件*】
+环境：BOE环境（iOS Safari）
+应用版本：Meego 移动端 H5 v3.9.0
+出现时间：2025-11-06 10:45:12
+【复现步骤*】
+1. 使用iPhone访问Meego，进入任务详情页上传封面图。
+2. 长按生成的缩略图。
+3. 系统弹出默认浏览器菜单（“保存图像”、“拷贝”），无Meego操作菜单。
+【当前表现*】
+未阻止原生事件冒泡，未模拟LongPress手势。
+无自定义菜单渲染，控制台无错误。
+【预期表现*】
+1. 长按应触发Meego自定义Action Sheet，包含“删除”、“替换”、“旋转”选项。
+2. 操作需带认证，成功后更新UI。
+【其他补充】
+user_mail：mobile_tester_li@company.com
+租户id：tenant_12345
+应用namespace：meego-mobile-app
+logid：log_mobile_longpress_not_work_003
+发生时间点：2025-11-06 10:45:12 UTC+8
+根因分析：未绑定触摸事件序列，未调用event.preventDefault()。
+建议优先级：P2
+修复建议：引入手势库或手动实现longpress检测，阻止默认行为。
+SLA等级：P2
+AI 推荐标签：longpress-handler-missing, context-menu-conflict, mobile-ui-bug
+ 
+用户反馈05：搜索结果中过时文档排名过高，无归档标识
+【前提条件*】
+环境：Pre环境
+应用版本：知识检索前端 v1.5.0，后端检索服务 v2.3.0
+出现时间：2025-11-12 11:15:30
+【复现步骤*】
+1. 搜索“图片上传预览方案”。
+2. 查看结果排序，检查是否包含已归档的V1草案文档。
+3. 检查文档是否有“已归档”标识。
+【当前表现*】
+已归档的V1草案文档排名第一，正式方案排名靠后。
+无“已归档”状态标签。
+用户可能参考废弃方案导致错误。
+【预期表现*】
+1. 默认过滤status: archived的文档。
+2. 若展示归档内容，应有明确视觉标识。
+3. 检索算法应加权updated_at，优先展示新鲜内容。
+【其他补充】
+user_mail：pm_wang@company.com
+租户id：tenant_doc_repo
+应用namespace：knowledge-portal
+logid：log_stale_doc_ranked_high_20251112_1115
+抓包信息：Vector DB Query: {"filters": []} // 缺失状态过滤
+发生时间点：2025-11-12 11:15:30 UTC+8
+根因分析：查询未附加状态过滤器，向量数据库schema不完整。
+建议优先级：P1
+修复建议：修改检索服务加入状态过滤，更新数据库schema，前端增加筛选控件。
+SLA等级：P1
+AI 推荐标签：filter-missing-in-query, ranking-algorithm-flaw, stale-content-risk
+ 
+用户反馈06：用户反馈数据未自动聚类分析，无法识别高频问题
+【前提条件*】
+环境：UAT环境
+应用版本：用户反馈聚类模块 v1.0.0
+出现时间：2025-11-13 16:40:20
+【复现步骤*】
+1. 登录客服后台，进入“反馈分析”面板。
+2. 选择“最近7天”，触发“自动聚类分析”。
+3. 查看“高频问题模式”板块。
+【当前表现*】
+聚类任务失败，状态显示“错误”。
+日志显示“Embedding model not initialized”。
+反馈数据仍以原始工单形式散列展示。
+【预期表现*】
+1. 任务成功生成3-5个核心问题簇（如“移动端iOS图片加载失败”）。
+2. 提供词云、趋势图等可视化报告。
+3. 每个问题簇关联知识库中的解决方案。
+【其他补充】
+user_mail：cs_system_bot@company.com
+租户id：tenant_support_platform
+应用namespace：feedback-analytics
+logid：log_feedback_clustering_missing_20251113_1640
+抓包信息：GET /health → 503 Unavailable
+[ERROR] Model path: /models/all-MiniLM-L6-v2 does not exist.
+发生时间点：2025-11-13 16:40:20 UTC+8
+根因分析：模型文件缺失，服务依赖故障。
+建议优先级：P2
+修复建议：修复模型文件挂载，增强服务健康检查，实现降级方案。
+SLA等级：P2
+AI 推荐标签：model-file-missing, microservice-unhealthy, clustering-service-down
+
+用户反馈07：文件名过长导致UI布局溢出，无省略号截断
+【前提条件*】
+环境：UAT环境
+应用版本：Meego 表单提交模块 v3.8.0
+出现时间：2025-11-10 10:15:30
+【复现步骤*】
+1. 上传长文件名PDF（如“2025年Q4产品迭代设计方案终稿_v12_审核通过版...”）。
+2. 观察文件名在列表中的展示效果。
+3. 检查是否出现水平滚动条或按钮被挤出。
+【当前表现*】
+文件名完全展开，导致布局破坏。
+无text-overflow: ellipsis样式。
+小屏设备体验差。
+【预期表现*】
+1. 文件名超出容器时显示省略号。
+2. 鼠标悬停显示完整Tooltip。
+3. 删除按钮始终可见，符合可访问性标准。
+【其他补充】
+user_mail：ui_consistency_checker@team.com
+租户id：tenant_accessibility_audit
+logid：log_filename_overflow_no_ellipsis_014
+发生时间点：2025-11-10 10:15:30 UTC+8
+根因分析：UI组件未统一约束文件名列宽，缺乏样式隔离。
+建议优先级：P3
+修复建议：添加CSS截断规则，使用title属性提供提示。
+SLA等级：P3
+AI 推荐标签：css-ellipsis-missing, ui-layout-overflow, accessibility-violation
+ 
+用户反馈08：Android Chrome双指缩放大图延迟卡顿，GPU加速未启用
+【前提条件*】
+环境：BOE环境（Android Chrome）
+应用版本：Meego H5 v3.9.0
+出现时间：2025-11-12 13:50:20
+【复现步骤*】
+1. 使用Android手机打开Chrome，进入大图查看器。
+2. 双指连续缩放图片。
+3. 观察图像响应帧率和流畅度。
+【当前表现*】
+缩放响应滞后，帧率低于15fps。
+未启用GPU加速（will-change: transform缺失）。
+Performance Tab显示大量重排重绘。
+【预期表现*】
+1. 缩放过程流畅，FPS ≥ 50。
+2. 利用CSS Transform和GPU加速提升性能。
+3. 参考现代图像查看器最佳实践。
+【其他补充】
+user_mail：perf_engineer_chen@boe.com
+租户id：tenant_performance_team
+logid：log_pinch_zoom_lag_android_025
+发生时间点：2025-11-12 13:50:20 UTC+8
+根因分析：DOM层级复杂，未提升为独立合成层。
+建议优先级：P2
+修复建议：添加GPU加速样式，使用requestAnimationFrame，引入专业缩放库。
+SLA等级：P2
+AI 推荐标签：pinch-zoom-performance, gpu-acceleration-missing, mobile-rendering-optimize-needed
